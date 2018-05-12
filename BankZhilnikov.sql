@@ -1,0 +1,100 @@
+CREATE DATABASE bank_zhilnikov;
+GO
+
+USE bank_zhilnikov;
+GO
+
+CREATE TABLE Clients (
+  ClientID INT IDENTITY(1,1) PRIMARY KEY CLUSTERED,
+  FirstName VARCHAR(50) NOT NULL,
+  LastName VARCHAR(50) NOT NULL,
+  Birthday DATE NULL,
+  Phone VARCHAR(30) NULL
+);
+CREATE TABLE Addresses (
+  ClientID INT PRIMARY KEY NOT NULL,
+  Country VARCHAR(50) NOT NULL,
+  State VARCHAR(50) NULL,
+  City VARCHAR(50) NOT NULL,
+  Address VARCHAR(100) NULL,
+  CONSTRAINT FK_ClientAddress FOREIGN KEY (ClientID) REFERENCES Clients(ClientID)
+);
+CREATE TABLE Cards (
+  CardID CHAR(16) PRIMARY KEY CLUSTERED,
+  ClientID INT NOT NULL,
+  PinCode CHAR(4) NOT NULL,
+  Balance MONEY NOT NULL,
+  CONSTRAINT FK_ClientCard FOREIGN KEY (ClientID) REFERENCES Clients(ClientID),
+  INDEX IX_Cards_ClientID NONCLUSTERED (ClientID)
+);
+CREATE TABLE Operations (
+  OperationID INT IDENTITY(1,1) PRIMARY KEY CLUSTERED,
+  OutID CHAR(16) NOT NULL,
+  InID CHAR(16) NOT NULL,
+  Amount MONEY NOT NULL,
+  OperationTime DATETIME NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT CK_Operations_OutIDInID CHECK (OutID != InID),
+  CONSTRAINT FK_OutCard FOREIGN KEY (OutID) REFERENCES Cards(CardID),
+  CONSTRAINT FK_InCard FOREIGN KEY (InID) REFERENCES Cards(CardID),
+  INDEX IX_Operations_OutID NONCLUSTERED (OutID),
+  INDEX IX_Operations_InID NONCLUSTERED (InID)
+);
+GO
+
+SET IDENTITY_INSERT Clients ON;
+GO
+
+INSERT INTO Clients(ClientID, FirstName, LastName, Birthday, Phone) VALUES
+  (1, 'Terminal', 'Bankomatovich', '1900-01-01', ''),
+  (2, 'Artem', 'Zhilin', '1996-06-24', '+380982546789'),
+  (3, 'Jason', 'Statham', '1967-07-26', '+441632960968'),
+  (4, 'Dwayne', 'Johnson', '1972-05-02', '+15733929999');
+SET IDENTITY_INSERT Clients OFF;
+GO
+
+INSERT INTO Addresses VALUES
+  (2, 'Ukraine', '', 'Kherson', 'Yshakova 96'),
+  (3, 'England', 'Derbyshire', 'Shirebrook', '38 Garden Ave'),
+  (4, 'United States', 'California', 'Hayward', '1913 Tulip Ave');
+
+INSERT INTO Cards VALUES
+  ('0000000000000000', 1, '0000', 0),
+  ('5324541716750139', 2, '4587', 0),
+  ('4532299331784683', 2, '1855', 0),
+  ('6011285978279835', 2, '6660', 0),
+  ('6011994639362902', 3, '3223', 0),
+  ('5404841058728971', 4, '9011', 0),
+  ('4929374969703932', 4, '4220', 0);
+GO
+
+INSERT INTO Operations(OutID, InID, Amount) VALUES 
+  ('0000000000000000', '5324541716750139', 500.5),
+  ('0000000000000000', '6011994639362902', 459.0),
+  ('0000000000000000', '6011285978279835', 863.80),
+  ('0000000000000000', '4929374969703932', 1392.43),
+  ('4929374969703932', '4532299331784683', 900.87),
+  ('6011285978279835', '4929374969703932', 12.0),
+  ('6011285978279835', '5324541716750139', 108.24),
+  ('5324541716750139', '6011994639362902', 200.0),
+  ('6011285978279835', '4532299331784683', 231.0),
+  ('4929374969703932', '5324541716750139', 35.0),
+  ('4929374969703932', '0000000000000000', 325);
+GO
+
+UPDATE C
+SET
+  C.Balance = COALESCE(Debits.DAmount, 0) - COALESCE(Credits.CAmount, 0)
+FROM Cards as C
+  LEFT JOIN (SELECT
+               InID,
+               SUM(COALESCE(Amount, 0)) as DAmount
+             FROM Operations
+             GROUP BY InID) Debits
+    ON C.CardID = Debits.InID
+  LEFT JOIN (SELECT
+               OutID,
+               SUM(COALESCE(Amount, 0)) as CAmount
+             FROM Operations
+             GROUP BY OutID) Credits
+    ON C.CardID = Credits.OutID;
+GO
